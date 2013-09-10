@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <project name="ManoWars" basedir="." default="build">
     <property name="dir-build" value="./build" />
-    <property name="dir-tests" value="./ManoWars/tests" />
-    <property name="dir-tests-logs" value="./ManoWars/tests/_reports" />
+    <property name="dir-tests" value="./tests" />
+    <property name="dir-tests-logs" value="./tests/_reports" />
     <property name="dir-logs" value="./build/logs" />
+    <property name="dir-app" value="./libs" />
     
     <!-- ======================== -->
     <!-- = (Default) Build Task = -->
@@ -11,11 +12,12 @@
     <target name="build">
         <phingcall target="clean"></phingcall>
         <phingcall target="structure"></phingcall>
-        
-        <phingcall target="makedist"></phingcall>
+        <phingcall target="composer"></phingcall>
         <phingcall target="phpunit"></phingcall>
         <phingcall target="metrics"></phingcall>
         <phingcall target="phpdoc"></phingcall>
+        <phingcall target="copylogs"></phingcall>
+        <phingcall target="makedist"></phingcall>
     </target>
     
     <!-- ============== -->
@@ -31,20 +33,24 @@
         	</fileset>
         </delete>
     </target>
+
+    
+    <!-- ========== -->
+    <!-- = Composer = -->
+    <!-- ========== -->
+    <target name="composer">
+        <echo msg="Running composer install ..." />
+        <exec command="composer install" logoutput="true" escape="false" />
+    </target>
     
     <!-- ========== -->
     <!-- = PHPDoc = -->
     <!-- ========== -->
     <target name="phpdoc">
-        <phpdoc title="ManoWars API Doc" sourcecode="yes" destdir="${dir-build}/docs" output="HTML:Smarty:PHP">            
-            <fileset dir="./ManoWars/libs/MW">
-                <include name="**/*.php" />
-            </fileset>        
-            <projdocfileset dir=".">
-                <include name="README"/>
-                <include name="INSTALL"/>
-            </projdocfileset>
-        </phpdoc>
+        <echo msg="Generating API docs ..." />
+        <exec
+            command="vendor/bin/phpdoc.php --progressbar --sourcecode"
+            logoutput="true" escape="false" />
     </target>
     
     <!-- ========================== -->
@@ -53,7 +59,12 @@
     <target name="makedist">
         <echo msg="Moving files to distribution directory ..." />
         <copy todir="${dir-build}/dist/">
-            <fileset dir="./ManoWars">
+            <fileset dir=".">
+                <exclude name="build/**" />
+                <exclude name="tests/**" />
+                <exclude name="composer**" />
+                <exclude name="phpunit**" />
+                <exclude name="phpdoc**" />
                 <include name="**" />
             </fileset>
         </copy>
@@ -80,12 +91,7 @@
     <!-- ================ -->
     <target name="phpunit">
         <echo msg="Running unit tests in ${dir-tests} ..." />
-        <exec dir="${dir-tests}" command="phpunit AllTests.php" logoutput="true" escape="false" />
-        <copy todir="${dir-logs}">
-        	<fileset dir="${dir-tests-logs}">
-        	    <include name="**" />
-        	</fileset>
-        </copy>
+        <exec command="vendor/bin/phpunit" logoutput="true" escape="false" />
     </target>
     
     <!-- ================ -->
@@ -93,7 +99,33 @@
     <!-- ================ -->
     <target name="metrics">
         <echo msg="Running metrics tools ..." />
-        <exec command="phpcpd --exclude ${dir-tests} --log-pmd ${dir-logs}/cpd.xml ." />
-        <exec command="pdepend -d memory_limit=1G --jdepend-xml=${dir-logs}/jdepend.xml ." escape="false" />
+        
+        <echo msg="# PHPCPD ..." />
+        <exec command="vendor/bin/phpcpd --log-pmd ${dir-tests-logs}/cpd.xml ${dir-app}" logoutput="true" escape="false" />
+        
+        <echo msg="# PDepend ..." />
+        <exec command="vendor/bin/pdepend -d memory_limit=1G --jdepend-xml=${dir-tests-logs}/jdepend.xml --summary-xml=${dir-tests-logs}/jdepend-summary.xml --jdepend-chart=${dir-tests-logs}/jdepend.svg --overview-pyramid=${dir-tests-logs}/jdepend-pyramid.svg ${dir-app}" logoutput="true" escape="false" />
+        
+        <echo msg="# PHP Code Sniffer ..." />
+        <exec command="vendor/bin/phpcs --standard=Zend -p -s --report-full=${dir-tests-logs}/codesniffer-full.txt --report-summary=${dir-tests-logs}/codesniffer-summary.txt --report-xml=${dir-tests-logs}/codesniffer.xml --report-checkstyle=${dir-tests-logs}/codesniffer-checkstyle.xml --report-gitblame=${dir-tests-logs}/codesniffer-gitblame.txt init.php ${dir-app}" logoutput="true" escape="false" />
+        
+        <echo msg="# PHP Mess Detector ..." />
+        <exec command="vendor/bin/phpmd ${dir-app} text cleancode,codesize,controversial,design,naming,unusedcode --reportfile ${dir-tests-logs}/phpmd.txt" logoutput="true" escape="false" />
+
+        <echo msg="# PHP Loc ..." />
+        <exec command="vendor/bin/phploc --progress --log-xml=${dir-tests-logs}/phploc.xml ${dir-app} ${dir-tests} init.php" logoutput="true" escape="false" />
+
+    </target>
+
+    <!-- ================== -->
+    <!-- = Log files copy = -->
+    <!-- ================== -->
+    <target name="copylogs">
+        <echo msg="Copying logs to build dir ..." />
+        <copy todir="${dir-logs}">
+            <fileset dir="${dir-tests-logs}">
+                <include name="**" />
+            </fileset>
+        </copy>
     </target>
 </project>
